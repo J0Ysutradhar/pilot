@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+dist/
+build/
+
+# Virtual environment
+.venv
+venv
+env
+
+# Django
+db.sqlite3
+*.sqlite3
+media/
+
+# Env files (inject secrets via Render env vars, NOT baked into image)
+.env
+
+# Dev/test files
+test_*.py
+output.txt
+error.log
+
+# Editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml

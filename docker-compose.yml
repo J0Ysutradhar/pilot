@@ -1,0 +1,46 @@
+# docker-compose.yml — Local development with PostgreSQL
+# Usage:
+#   docker compose up --build        # start everything
+#   docker compose down -v           # stop and remove volumes
+
+version: "3.9"
+
+services:
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: pagepilot_db
+      POSTGRES_USER: pagepilot_user
+      POSTGRES_PASSWORD: pagepilot_pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pagepilot_user -d pagepilot_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Override DB for local Docker (overrides .env if set)
+      DATABASE_URL: postgres://pagepilot_user:pagepilot_pass@db:5432/pagepilot_db
+      DEBUG: "True"
+      SECRET_KEY: "local-dev-secret-key-change-in-prod"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  media_data:
