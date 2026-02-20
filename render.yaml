@@ -55,4 +55,4 @@ services:
       - key: API_ADMIN_PASSWORD
         sync: false
 
-    healthCheckPath: /accounts/login/
+    healthCheckPath: /login/
