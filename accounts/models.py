@@ -125,3 +125,36 @@ class SubscriptionHistory(models.Model):
     class Meta:
         ordering = ['-created_at']
         verbose_name_plural = "Subscription Histories"
+
+
+class PaymentRequest(models.Model):
+    """Tracks manual payment requests submitted by user for subscription upgrades"""
+    
+    PAYMENT_METHOD_CHOICES = (
+        ('BKASH', 'Bkash'),
+        ('NAGAD', 'Nagad'),
+        ('CRYPTO', 'Crypto (USDT/USDC)'),
+    )
+    
+    STATUS_CHOICES = (
+        ('PENDING', 'Pending'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+    )
+
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='payment_requests')
+    package_name = models.CharField(max_length=100)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES)
+    transaction_id = models.CharField(max_length=255)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.email} - {self.package_name} ({self.status})"
+
+    class Meta:
+        ordering = ['-created_at']
+

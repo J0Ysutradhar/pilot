@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
-from .models import CustomUser, UserProfile, AIAgentConfig
+from .models import CustomUser, UserProfile, AIAgentConfig, PaymentRequest
 
 
 class CustomUserCreationForm(UserCreationForm):
@@ -144,4 +144,27 @@ class AIAgentConfigForm(forms.ModelForm):
                 'rows': 6
             }),
             'blocked_post_ids': forms.HiddenInput()
+        }
+
+
+class PaymentRequestForm(forms.ModelForm):
+    """Form for user to submit payment for a subscription package"""
+    class Meta:
+        model = PaymentRequest
+        fields = ['package_name', 'payment_method', 'transaction_id']
+        widgets = {
+            'package_name': forms.Select(choices=[
+                ('', 'Select Package'),
+                ('15 Days Package', '15 Days Package (2,500 BDT)'),
+                ('30 Days Package', '30 Days Package (3,000 BDT)')
+            ], attrs={
+                'class': 'w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition duration-200 bg-white mb-2'
+            }),
+            'payment_method': forms.Select(attrs={
+                'class': 'w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition duration-200 bg-white mb-2'
+            }),
+            'transaction_id': forms.TextInput(attrs={
+                'class': 'w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition duration-200 mb-2',
+                'placeholder': 'e.g. 9B8E7D6C5B4A'
+            }),
         }
