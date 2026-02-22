@@ -164,7 +164,7 @@ def admin_kyc_action(request):
         action = request.POST.get('action')
         
         profile = get_object_or_404(UserProfile, user__id=user_id)
-        
+#https://github.com/J0Ysutradhar/pilot.git
         if action == 'approve':
             profile.kyc_status = 'VERIFIED'
             profile.kyc_rejection_reason = ''  # Clear any previous rejection reason
