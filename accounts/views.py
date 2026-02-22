@@ -3,9 +3,9 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, FileResponse, Http404
 from django.contrib import messages
-from .forms import CustomUserCreationForm, CustomAuthenticationForm, UserProfileForm, AIAgentConfigForm, KYCUploadForm
+from .forms import CustomUserCreationForm, CustomAuthenticationForm, UserProfileForm, AIAgentConfigForm, KYCUploadForm, PaymentRequestForm
 
-from .models import CustomUser, UserProfile, AIAgentConfig
+from .models import CustomUser, UserProfile, AIAgentConfig, PaymentRequest
 import pandas as pd
 import io
 import requests
@@ -517,3 +517,39 @@ def serve_protected_media(request, file_path):
     import mimetypes
     content_type, _ = mimetypes.guess_type(full_path)
     return FileResponse(open(full_path, 'rb'), content_type=content_type or 'application/octet-stream')
+
+
+@login_required
+def wallet_view(request):
+    """View and manage wallet/subscription payments"""
+    profile = getattr(request.user, 'profile', None)
+    
+    if request.method == 'POST':
+        form = PaymentRequestForm(request.POST)
+        if form.is_valid():
+            payment_request = form.save(commit=False)
+            payment_request.user = request.user
+            # Automatically set the amount based on selected package
+            if payment_request.package_name == '15 Days Package':
+                payment_request.amount = 2500.00
+            elif payment_request.package_name == '30 Days Package':
+                payment_request.amount = 3000.00
+            else:
+                payment_request.amount = 0.00
+            
+            payment_request.save()
+            messages.success(request, 'Payment request submitted successfully! It is now pending admin approval.')
+            return redirect('wallet')
+        else:
+            messages.error(request, 'There was an error in your submission. Please check the fields below.')
+    else:
+        form = PaymentRequestForm()
+
+    # Get user's payment history
+    payment_history = PaymentRequest.objects.filter(user=request.user)
+
+    return render(request, 'accounts/wallet.html', {
+        'form': form,
+        'profile': profile,
+        'payment_history': payment_history
+    })

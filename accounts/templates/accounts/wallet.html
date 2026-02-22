@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+
+{% block title %}My Wallet - Page Pilot{% endblock %}
+
+{% block content %}
+<div class="p-6 max-w-7xl mx-auto space-y-8">
+
+    <!-- Header -->
+    <div
+        class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
+        <div
+            class="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2">
+        </div>
+        <div class="relative z-10">
+            <h1 class="text-3xl font-bold mb-2">My Wallet</h1>
+            <p class="text-blue-100 flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z">
+                    </path>
+                </svg>
+                Current Package: <strong class="ml-1 text-white">{{ profile.package_name|default:'None' }}</strong>
+            </p>
+            {% if profile.subscription_expiry %}
+            <p class="text-sm mt-2 text-indigo-200">Expires on: {{ profile.subscription_expiry|date:"F j, Y, g:i a" }}
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Left Col: Recharge Form -->
+        <div
+            class="lg:col-span-1 border border-gray-200 bg-white rounded-2xl shadow-sm p-6 relative overflow-hidden h-max">
+            <h2 class="text-xl font-bold text-gray-800 mb-6 flex items-center">
+                Upgrade / Recharge
+            </h2>
+
+            <form method="POST" class="space-y-6">
+                {% csrf_token %}
+
+                <!-- Package Selection -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Select Package</label>
+                    {{ form.package_name }}
+                    <p class="text-xs text-gray-500 mt-1">7 Days package is a free trial (No payment required).</p>
+                </div>
+
+                <!-- Payment Method -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Payment Method</label>
+                    {{ form.payment_method }}
+                </div>
+
+                <!-- Dynamic Payment Instructions Box -->
+                <div id="paymentInstructions"
+                    class="hidden bg-blue-50 border border-blue-100 rounded-xl p-5 shadow-inner">
+                    <p class="text-sm text-blue-800 font-medium mb-3">Send Payment Here:</p>
+
+                    <div id="bkashNagadInstruction" class="hidden">
+                        <div
+                            class="flex items-center justify-between bg-white p-3 rounded-lg border border-blue-100 mb-2">
+                            <span class="text-sm text-gray-600">Personal Number</span>
+                            <span class="font-mono font-bold text-gray-900 select-all tracking-wider">01781763345</span>
+                        </div>
+                    </div>
+
+                    <div id="cryptoInstruction" class="hidden">
+                        <div class="bg-white p-3 rounded-lg border border-blue-100 mb-2">
+                            <span class="text-xs text-gray-500 block mb-1">BNB Chain (BEP20) - USDT/USDC</span>
+                            <span
+                                class="font-mono text-xs font-bold text-gray-900 select-all break-all">0x77F6E243c8f7925e64719F07B262A2864b7FDfFc</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between border-t border-blue-200 mt-3 pt-3">
+                        <span class="text-sm font-semibold text-gray-700">Payable Amount:</span>
+                        <span id="payableAmountDisplay" class="text-lg font-bold text-blue-700">0.00 BDT</span>
+                    </div>
+                </div>
+
+                <!-- Transaction ID -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Transaction/Hash ID</label>
+                    {{ form.transaction_id }}
+                    <p class="text-xs text-gray-500 mt-1">Found in your SMS, app, or block explorer.</p>
+                </div>
+
+                <button type="submit"
+                    class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-3 px-4 rounded-xl hover:shadow-lg hover:from-blue-700 hover:to-indigo-700 focus:ring-4 focus:ring-blue-300 transition-all duration-200 transform hover:-translate-y-0.5">
+                    Submit Request
+                </button>
+            </form>
+        </div>
+
+        <!-- Right Col: Payment History -->
+        <div class="lg:col-span-2">
+            <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                    <h2 class="text-xl font-bold text-gray-800">Payment History</h2>
+                    <span class="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                        {{ payment_history.count }} Records</span>
+                </div>
+
+                {% if payment_history %}
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                            <tr>
+                                <th scope="col" class="px-6 py-4">Date</th>
+                                <th scope="col" class="px-6 py-4">Package</th>
+                                <th scope="col" class="px-6 py-4">Method</th>
+                                <th scope="col" class="px-6 py-4">Amount</th>
+                                <th scope="col" class="px-6 py-4">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payment in payment_history %}
+                            <tr class="bg-white border-b hover:bg-gray-50 transition-colors">
+                                <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
+                                    {{ payment.created_at|date:"M d, Y" }}
+                                    <div class="text-xs text-gray-400 font-normal">{{ payment.created_at|date:"H:i" }}
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <span class="font-semibold text-gray-800">{{ payment.package_name }}</span>
+                                </td>
+                                <td class="px-6 py-4 uppercase text-xs font-bold tracking-wider text-gray-600">
+                                    {{ payment.get_payment_method_display }}
+                                </td>
+                                <td class="px-6 py-4 font-mono font-medium text-gray-800">
+                                    {{ payment.amount }} BDT
+                                </td>
+                                <td class="px-6 py-4">
+                                    {% if payment.status == 'APPROVED' %}
+                                    <span
+                                        class="inline-flex items-center bg-green-100 text-green-800 text-xs font-medium px-2.5 py-1 rounded-full border border-green-200">
+                                        <span class="w-1.5 h-1.5 me-1.5 bg-green-600 rounded-full"></span> Approved
+                                    </span>
+                                    {% elif payment.status == 'REJECTED' %}
+                                    <span
+                                        class="inline-flex items-center bg-red-100 text-red-800 text-xs font-medium px-2.5 py-1 rounded-full border border-red-200">
+                                        <span class="w-1.5 h-1.5 me-1.5 bg-red-600 rounded-full"></span> Rejected
+                                    </span>
+                                    {% else %}
+                                    <span
+                                        class="inline-flex items-center bg-amber-100 text-amber-800 text-xs font-medium px-2.5 py-1 rounded-full border border-amber-200">
+                                        <span class="w-1.5 h-1.5 me-1.5 bg-amber-600 rounded-full animate-pulse"></span>
+                                        Pending
+                                    </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-12 text-center">
+                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
+                            </path>
+                        </svg>
+                    </div>
+                    <p class="text-gray-500 font-medium text-lg">No payment history found.</p>
+                    <p class="text-gray-400 text-sm mt-1">Your recharge requests will appear here.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const packageSelect = document.getElementById('id_package_name');
+        const methodSelect = document.getElementById('id_payment_method');
+
+        const instructionsBox = document.getElementById('paymentInstructions');
+        const bkashNagadInstr = document.getElementById('bkashNagadInstruction');
+        const cryptoInstr = document.getElementById('cryptoInstruction');
+        const amountDisplay = document.getElementById('payableAmountDisplay');
+
+        function updateForm() {
+            const pkg = packageSelect.value;
+            const method = methodSelect.value;
+
+            // Show/Hide instructions container if both are selected (and not 7 days trial, which we handle differently)
+            if (pkg && method) {
+                instructionsBox.classList.remove('hidden');
+
+                // Set Pricing
+                if (pkg.includes('15 Days')) {
+                    amountDisplay.textContent = '2,500 BDT';
+                } else if (pkg.includes('30 Days')) {
+                    amountDisplay.textContent = '3,000 BDT';
+                } else {
+                    amountDisplay.textContent = '0 BDT'; // For 7 days
+                }
+
+                // Set Instructions
+                if (method === 'CRYPTO') {
+                    cryptoInstr.classList.remove('hidden');
+                    bkashNagadInstr.classList.add('hidden');
+                    if (pkg.includes('15 Days')) amountDisplay.textContent = '~21 USDT/USDC'; // Approx 120 rate
+                    if (pkg.includes('30 Days')) amountDisplay.textContent = '~25 USDT/USDC';
+                } else {
+                    bkashNagadInstr.classList.remove('hidden');
+                    cryptoInstr.classList.add('hidden');
+                }
+            } else {
+                instructionsBox.classList.add('hidden');
+            }
+        }
+
+        packageSelect.addEventListener('change', updateForm);
+        methodSelect.addEventListener('change', updateForm);
+    });
+</script>
+{% endblock %}

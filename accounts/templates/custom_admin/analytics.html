@@ -1,0 +1,254 @@
+{% extends 'custom_admin/base_admin.html' %}
+
+{% block title %}Analytics Dashboard{% endblock %}
+
+{% block content %}
+<div class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div>
+        <h1 class="text-3xl font-bold text-white mb-2">Revenue & Analytics</h1>
+        <p class="text-slate-400">Monitor your platform's growth, conversions, and revenue metrics.</p>
+    </div>
+</div>
+
+<!-- Revenue Highlight -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div
+        class="bg-gradient-to-br from-indigo-900 to-indigo-700 border border-indigo-500/30 rounded-xl p-6 shadow-xl relative overflow-hidden">
+        <div class="absolute top-0 right-0 -mr-8 -mt-8 opacity-20">
+            <i data-lucide="trending-up" class="w-32 h-32 text-indigo-300"></i>
+        </div>
+        <div class="relative z-10">
+            <h3 class="text-indigo-200 text-sm font-medium uppercase tracking-wider mb-2">Total Revenue</h3>
+            <div class="flex items-baseline">
+                <span class="text-4xl font-extrabold text-white">{{ total_revenue|floatformat:2 }}</span>
+                <span class="ml-2 pl-1 text-indigo-200 font-medium tracking-wide">BDT</span>
+            </div>
+            <p class="text-indigo-300 text-sm mt-3 pt-3 border-t border-indigo-500/30">Total from all approved payments
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+
+    <!-- Revenue Over Time -->
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg">
+        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+            <i data-lucide="bar-chart-2" class="w-5 h-5 mr-3 text-indigo-400 bg-indigo-500/10 p-1 rounded-md"></i>
+            Revenue (Last 30 Days)
+        </h3>
+        <div class="relative h-72 w-full">
+            <canvas id="revenueChart"></canvas>
+        </div>
+    </div>
+
+    <!-- User Growth -->
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg">
+        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+            <i data-lucide="users" class="w-5 h-5 mr-3 text-blue-400 bg-blue-500/10 p-1 rounded-md"></i>
+            User Signups (Last 30 Days)
+        </h3>
+        <div class="relative h-72 w-full">
+            <canvas id="userGrowthChart"></canvas>
+        </div>
+    </div>
+
+    <!-- KYC Conversion -->
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg">
+        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+            <i data-lucide="pie-chart" class="w-5 h-5 mr-3 text-yellow-400 bg-yellow-500/10 p-1 rounded-md"></i>
+            KYC Conversion Rate
+        </h3>
+        <div class="relative h-72 w-full flex justify-center">
+            <canvas id="kycChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Subscriptions by Package -->
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg">
+        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+            <i data-lucide="package" class="w-5 h-5 mr-3 text-emerald-400 bg-emerald-500/10 p-1 rounded-md"></i>
+            Active Subscriptions by Package
+        </h3>
+        <div class="relative h-72 w-full flex justify-center">
+            <canvas id="packageChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+
+        // Global Chart Defaults for Dark Theme
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.font.family = "'Outfit', sans-serif";
+
+        const gridOptions = {
+            color: '#334155',
+            borderDash: [5, 5]
+        };
+
+        // Parse Data securely
+        const datesUsers = JSON.parse('{{ dates_users_json|escapejs }}');
+        const countsUsers = JSON.parse('{{ counts_users_json|escapejs }}');
+
+        const datesRev = JSON.parse('{{ dates_revenue_json|escapejs }}');
+        const amountsRev = JSON.parse('{{ amounts_revenue_json|escapejs }}');
+
+        const kycLabels = JSON.parse('{{ kyc_labels_json|escapejs }}');
+        const kycData = JSON.parse('{{ kyc_data_json|escapejs }}');
+
+        const packageLabels = JSON.parse('{{ package_labels_json|escapejs }}');
+        const packageData = JSON.parse('{{ package_data_json|escapejs }}');
+
+        // 1. User Growth Chart
+        new Chart(document.getElementById('userGrowthChart').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: datesUsers,
+                datasets: [{
+                    label: 'New Users',
+                    data: countsUsers,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#3b82f6',
+                    pointBorderColor: '#1e293b',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleColor: '#f8fafc',
+                        bodyColor: '#cbd5e1',
+                        borderColor: '#334155',
+                        borderWidth: 1,
+                        padding: 10
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { grid: gridOptions, beginAtZero: true, ticks: { precision: 0 } }
+                }
+            }
+        });
+
+        // 2. Revenue Chart
+        new Chart(document.getElementById('revenueChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: datesRev,
+                datasets: [{
+                    label: 'Revenue (BDT)',
+                    data: amountsRev,
+                    backgroundColor: '#6366f1',
+                    hoverBackgroundColor: '#818cf8',
+                    borderRadius: 4,
+                    barPercentage: 0.6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        padding: 10,
+                        callbacks: {
+                            label: function (context) {
+                                return context.raw + ' BDT';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { grid: gridOptions, beginAtZero: true }
+                }
+            }
+        });
+
+        // 3. KYC Conversion Chart (Doughnut)
+        const kycColors = kycLabels.map(label => {
+            if (label === 'VERIFIED') return '#22c55e'; // Green
+            if (label === 'PENDING') return '#eab308'; // Yellow
+            if (label === 'REJECTED') return '#ef4444'; // Red
+            return '#64748b'; // Slate (Unverified)
+        });
+
+        new Chart(document.getElementById('kycChart').getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: kycLabels,
+                datasets: [{
+                    data: kycData,
+                    backgroundColor: kycColors,
+                    borderWidth: 0,
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '70%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { padding: 20, usePointStyle: true, pointStyle: 'circle' }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    }
+                }
+            }
+        });
+
+        // 4. Package Composition Chart
+        new Chart(document.getElementById('packageChart').getContext('2d'), {
+            type: 'pie',
+            data: {
+                labels: packageLabels,
+                datasets: [{
+                    data: packageData,
+                    backgroundColor: [
+                        '#10b981', // Emerald
+                        '#3b82f6', // Blue
+                        '#8b5cf6', // Violet
+                        '#f59e0b', // Amber
+                        '#ec4899'  // Pink
+                    ],
+                    borderWidth: 1,
+                    borderColor: '#1e293b',
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { padding: 20, usePointStyle: true, pointStyle: 'circle' }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

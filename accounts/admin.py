@@ -2,8 +2,8 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
 from django.conf import settings
-from .models import CustomUser, UserProfile, AIAgentConfig, SubscriptionHistory
-from .emails import send_kyc_approved_email, send_kyc_rejected_email
+from .models import CustomUser, UserProfile, AIAgentConfig, SubscriptionHistory, PaymentRequest
+from .emails import send_kyc_approved_email, send_kyc_rejected_email, send_payment_approved_email, send_payment_rejected_email
 
 
 class CustomUserAdmin(UserAdmin):
@@ -131,6 +131,75 @@ class UserProfileAdmin(admin.ModelAdmin):
     def assign_30_days(self, request, queryset):
         self.assign_days(request, queryset, 30, "30 Days Pack")
  
+
+@admin.register(PaymentRequest)
+class PaymentRequestAdmin(admin.ModelAdmin):
+    list_display = ['user', 'package_name', 'amount', 'payment_method', 'transaction_id', 'status', 'created_at']
+    list_filter = ['status', 'payment_method', 'package_name']
+    search_fields = ['user__email', 'transaction_id']
+    actions = ['approve_payment', 'reject_payment']
+
+    @admin.action(description="✅ Approve Selected Payments")
+    def approve_payment(self, request, queryset):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        # Process only pending payments to avoid double-processing
+        pending_requests = queryset.filter(status='PENDING')
+        payment_ids = list(pending_requests.values_list('id', flat=True))
+        
+        if not payment_ids:
+            self.message_user(request, "No pending payments selected.", level='WARNING')
+            return
+
+        updated_count = pending_requests.update(status='APPROVED')
+
+        now = timezone.now()
+        for payment in PaymentRequest.objects.filter(id__in=payment_ids).select_related('user__profile'):
+            profile = payment.user.profile
+            days = 0
+            if '15' in payment.package_name:
+                days = 15
+            elif '30' in payment.package_name:
+                days = 30
+            
+            if days > 0:
+                # Extend from current expiry or now
+                if profile.subscription_expiry and profile.subscription_expiry > now:
+                    new_expiry = profile.subscription_expiry + timedelta(days=days)
+                else:
+                    new_expiry = now + timedelta(days=days)
+                
+                profile.subscription_expiry = new_expiry
+                profile.package_name = payment.package_name
+                profile.save(update_fields=['subscription_expiry', 'package_name'])
+                
+                SubscriptionHistory.objects.create(
+                    profile=profile,
+                    package_name=payment.package_name,
+                    expiry_date=new_expiry
+                )
+            
+            send_payment_approved_email(payment)
+            
+        self.message_user(request, f"{updated_count} payment(s) approved. Subscriptions updated and emails sent.")
+
+    @admin.action(description="❌ Reject Selected Payments")
+    def reject_payment(self, request, queryset):
+        pending_requests = queryset.filter(status='PENDING')
+        payment_ids = list(pending_requests.values_list('id', flat=True))
+        
+        if not payment_ids:
+            self.message_user(request, "No pending payments selected.", level='WARNING')
+            return
+
+        updated_count = pending_requests.update(status='REJECTED')
+
+        for payment in PaymentRequest.objects.filter(id__in=payment_ids).select_related('user'):
+            send_payment_rejected_email(payment)
+            
+        self.message_user(request, f"{updated_count} payment(s) rejected and emails sent.")
+
 
 admin.site.register(CustomUser, CustomUserAdmin)
 # admin.site.register(UserProfile) # Replaced with custom admin class

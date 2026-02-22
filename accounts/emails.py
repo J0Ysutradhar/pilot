@@ -89,3 +89,33 @@ def send_subscription_expiry_warning(profile, days_remaining):
         },
         recipient_email=profile.user.email,
     )
+
+
+def send_payment_approved_email(payment_request):
+    """Send email when a payment request is approved."""
+    profile = payment_request.user.profile
+    return _send_email(
+        subject=f'Payment Approved — Subscription Upgraded! 🎉',
+        template_name='emails/payment_approved.html',
+        context={
+            'user_name': profile.name or profile.user.email,
+            'package_name': payment_request.package_name,
+            'amount': payment_request.amount,
+        },
+        recipient_email=profile.user.email,
+    )
+
+
+def send_payment_rejected_email(payment_request):
+    """Send email when a payment request is rejected."""
+    profile = payment_request.user.profile
+    return _send_email(
+        subject=f'Payment Rejected — Action Required',
+        template_name='emails/payment_rejected.html',
+        context={
+            'user_name': profile.name or profile.user.email,
+            'package_name': payment_request.package_name,
+            'amount': payment_request.amount,
+        },
+        recipient_email=profile.user.email,
+    )

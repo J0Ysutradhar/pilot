@@ -1,10 +1,12 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
-from django.db.models import Count, Q
+import json
+from django.db.models import Count, Q, Sum
+from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.core.paginator import Paginator
-from .models import CustomUser, UserProfile, AIAgentConfig
+from .models import CustomUser, UserProfile, AIAgentConfig, PaymentRequest
 
 # Check if user is superuser
 def is_superuser(user):
@@ -20,6 +22,7 @@ def admin_dashboard(request):
     total_users = CustomUser.objects.count()
     new_users_today = CustomUser.objects.filter(date_joined__date=timezone.now().date()).count()
     pending_kyc = UserProfile.objects.filter(kyc_status='PENDING').count()
+    pending_payments = PaymentRequest.objects.filter(status='PENDING').count()
     total_ai_agents = AIAgentConfig.objects.count()
     
     # Recent 5 users
@@ -29,6 +32,7 @@ def admin_dashboard(request):
         'total_users': total_users,
         'new_users_today': new_users_today,
         'pending_kyc': pending_kyc,
+        'pending_payments': pending_payments,
         'total_ai_agents': total_ai_agents,
         'recent_users': recent_users,
         'active_subscriptions': UserProfile.objects.filter(subscription_expiry__gt=timezone.now()).count()
@@ -86,6 +90,7 @@ def admin_user_detail(request, user_id):
     user = get_object_or_404(CustomUser, id=user_id)
     profile = user.profile
     ai_config = getattr(user, 'ai_config', None)
+    payment_requests = PaymentRequest.objects.filter(user=user).order_by('-created_at')
     
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -125,7 +130,8 @@ def admin_user_detail(request, user_id):
     context = {
         'user_obj': user,
         'profile': profile,
-        'ai_config': ai_config
+        'ai_config': ai_config,
+        'payment_requests': payment_requests,
     }
     return render(request, 'custom_admin/user_detail.html', context)
 
@@ -261,3 +267,175 @@ def admin_subscription_list(request):
         'query': query,
     }
     return render(request, 'custom_admin/subscription_list.html', context)
+
+
+@login_required
+@user_passes_test(is_superuser)
+def admin_payment_list(request):
+    """
+    List user Payment Requests for review.
+    """
+    status_filter = request.GET.get('status', 'PENDING')
+    query = request.GET.get('q', '')
+
+    payments = PaymentRequest.objects.select_related('user').all().order_by('-created_at')
+
+    if status_filter != 'all':
+        payments = payments.filter(status=status_filter.upper())
+        
+    if query:
+        payments = payments.filter(
+            Q(user__email__icontains=query) |
+            Q(transaction_id__icontains=query)
+        )
+
+    # Stats
+    pending_count = PaymentRequest.objects.filter(status='PENDING').count()
+    approved_count = PaymentRequest.objects.filter(status='APPROVED').count()
+
+    paginator = Paginator(payments, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        'payments': page_obj,
+        'page_obj': page_obj,
+        'status_filter': status_filter,
+        'query': query,
+        'pending_count': pending_count,
+        'approved_count': approved_count
+    }
+    return render(request, 'custom_admin/payment_list.html', context)
+
+
+@login_required
+@user_passes_test(is_superuser)
+def admin_payment_action(request):
+    """
+    Handle Approve/Reject for Payment Requests
+    """
+    if request.method == 'POST':
+        payment_id = request.POST.get('payment_id')
+        action = request.POST.get('action')
+        
+        payment = get_object_or_404(PaymentRequest, id=payment_id)
+        
+        # Prevent double-processing
+        if payment.status != 'PENDING':
+            messages.warning(request, f"Payment {payment.transaction_id} was already processed.")
+            return redirect('admin_payment_list')
+
+        if action == 'approve':
+            from django.utils import timezone
+            from datetime import timedelta
+            from .models import SubscriptionHistory
+            from .emails import send_payment_approved_email
+
+            payment.status = 'APPROVED'
+            payment.save()
+
+            now = timezone.now()
+            profile = payment.user.profile
+            days = 0
+            if '15' in payment.package_name:
+                days = 15
+            elif '30' in payment.package_name:
+                days = 30
+            
+            if days > 0:
+                if profile.subscription_expiry and profile.subscription_expiry > now:
+                    new_expiry = profile.subscription_expiry + timedelta(days=days)
+                else:
+                    new_expiry = now + timedelta(days=days)
+                
+                profile.subscription_expiry = new_expiry
+                profile.package_name = payment.package_name
+                profile.save(update_fields=['subscription_expiry', 'package_name'])
+                
+                SubscriptionHistory.objects.create(
+                    profile=profile,
+                    package_name=payment.package_name,
+                    expiry_date=new_expiry
+                )
+            
+            send_payment_approved_email(payment)
+            messages.success(request, f"Payment for {payment.user.email} APPROVED. Subscription extended.")
+            
+        elif action == 'reject':
+            from .emails import send_payment_rejected_email
+            payment.status = 'REJECTED'
+            payment.save()
+            send_payment_rejected_email(payment)
+            messages.warning(request, f"Payment for {payment.user.email} REJECTED.")
+            
+    return redirect('admin_payment_list')
+
+
+@login_required
+@user_passes_test(is_superuser)
+def admin_analytics(request):
+    """
+    Analytics and Revenue Dashboard
+    """
+    now = timezone.now()
+    thirty_days_ago = now - timezone.timedelta(days=30)
+    
+    # 1. Total Revenue (from approved payments all time)
+    total_revenue = PaymentRequest.objects.filter(status='APPROVED').aggregate(total=Sum('amount'))['total'] or 0
+    
+    # 2. Daily User Growth (last 30 days)
+    daily_users = CustomUser.objects.filter(date_joined__gte=thirty_days_ago) \
+        .annotate(date=TruncDate('date_joined')) \
+        .values('date') \
+        .annotate(count=Count('id')) \
+        .order_by('date')
+    
+    dates_users = [item['date'].strftime('%b %d') for item in daily_users]
+    counts_users = [item['count'] for item in daily_users]
+    
+    # 3. Revenue Over Time (last 30 days)
+    daily_revenue = PaymentRequest.objects.filter(status='APPROVED', created_at__gte=thirty_days_ago) \
+        .annotate(date=TruncDate('created_at')) \
+        .values('date') \
+        .annotate(total=Sum('amount')) \
+        .order_by('date')
+        
+    dates_revenue = [item['date'].strftime('%b %d') for item in daily_revenue]
+    amounts_revenue = [float(item['total']) for item in daily_revenue]
+    
+    # 4. KYC Conversion
+    kyc_stats = UserProfile.objects.values('kyc_status').annotate(count=Count('id'))
+    kyc_labels = []
+    kyc_data = []
+    for stat in kyc_stats:
+        status = stat['kyc_status']
+        if not status: status = 'UNVERIFIED'
+        kyc_labels.append(status)
+        kyc_data.append(stat['count'])
+        
+    # 5. Subscriptions by Package (Active)
+    package_stats = UserProfile.objects.filter(subscription_expiry__gt=now) \
+        .values('package_name') \
+        .annotate(count=Count('id'))
+    
+    package_labels = []
+    package_data = []
+    for stat in package_stats:
+        name = stat['package_name']
+        if not name: name = 'Free Trial'
+        package_labels.append(name)
+        package_data.append(stat['count'])
+        
+    context = {
+        'total_revenue': total_revenue,
+        'dates_users_json': json.dumps(dates_users),
+        'counts_users_json': json.dumps(counts_users),
+        'dates_revenue_json': json.dumps(dates_revenue),
+        'amounts_revenue_json': json.dumps(amounts_revenue),
+        'kyc_labels_json': json.dumps(kyc_labels),
+        'kyc_data_json': json.dumps(kyc_data),
+        'package_labels_json': json.dumps(package_labels),
+        'package_data_json': json.dumps(package_data),
+    }
+    
+    return render(request, 'custom_admin/analytics.html', context)
